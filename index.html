@@ -184,8 +184,11 @@ function resizeCoin(){
 resizeCoin();
 window.addEventListener('resize',resizeCoin);
 
-/* draw coin face given scaleX in [-1,1] */
-function drawCoin(faceIsHeads, scaleX){
+/* draw coin face
+   showHeads = which face to display (true=heads, false=tails)
+   scaleX    = [-1..1] controls 3D perspective width (sign no longer encodes face) */
+function drawCoin(showHeads, scaleX){
+  const showH = showHeads;
   ctx.save();
   ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.clearRect(0,0,CW,CH);
@@ -193,9 +196,6 @@ function drawCoin(faceIsHeads, scaleX){
   const R=Math.min(CW,CH)*.455;
   const rx=R*Math.abs(scaleX);
   if(rx<0.5){ctx.restore();return;}
-
-  /* which face shows: positive scaleX = front, negative = back */
-  const showH = scaleX>=0 ? faceIsHeads : !faceIsHeads;
 
   ctx.translate(cx,cy);
 
@@ -283,7 +283,7 @@ function loop(ts){
     CC.style.transform=`translateY(${floatY}px)`;
     shadow.style.opacity='1';
     shadow.style.transform=`scaleY(.4) scaleX(${.82+Math.sin(idleT*1.05)*.05})`;
-    drawCoin(coinIsHeads, coinIsHeads ? 1 : -1);
+    drawCoin(coinIsHeads, 1);
 
   }else if(state==='fly'){
     spinAngle+=spinSpeed*dt;
@@ -299,22 +299,20 @@ function loop(ts){
     /* settle spin once coin is coming back down and past 20% from top */
     if(gone && !settled && velY>0 && coinScreenY>window.innerHeight*.12){
       settled=true;
-      /* target: heads=0 (cos=+1 shows front), tails=Math.PI (cos=-1 shows back=tails) */
+      spinSpeed=0;
+      /* heads=0 → cos(0)=+1 → showingHeads=coinIsHeads=true ✓
+         tails=π → cos(π)=-1 → showingHeads=!coinIsHeads=false ✓ */
       const target = coinIsHeads ? 0 : Math.PI;
-      /* find nearest multiple of 2π above current angle that lands on target */
-      const fullTurns = Math.ceil(spinAngle / (Math.PI*2));
-      spinAngle = fullTurns * Math.PI*2 + target;
-      spinSpeed = 0.006; /* slow crawl toward final angle */
+      const n = Math.round(spinAngle / (Math.PI*2));
+      spinAngle = n * Math.PI*2 + target;
     }
 
-    /* slow spin to a stop as it nears final angle */
+    /* lerp to exact final angle */
     if(settled){
       const target = coinIsHeads ? 0 : Math.PI;
-      const fullTurns = Math.round((spinAngle - target) / (Math.PI*2));
-      const finalAngle = fullTurns * Math.PI*2 + target;
-      const diff = finalAngle - spinAngle;
-      spinAngle += diff * 0.12; /* lerp toward exact */
-      spinSpeed = 0;
+      const n = Math.round((spinAngle - target) / (Math.PI*2));
+      const finalAngle = n * Math.PI*2 + target;
+      spinAngle += (finalAngle - spinAngle) * 0.15;
     }
 
     /* landed */
@@ -335,7 +333,10 @@ function loop(ts){
 
     /* move canvas */
     CC.style.transform=`translateY(${posY}px)`;
-    drawCoin(coinIsHeads,Math.cos(spinAngle));
+    /* cos > 0 = front face visible, cos < 0 = back face visible */
+    const cosA = Math.cos(spinAngle);
+    const showingHeads = cosA >= 0 ? coinIsHeads : !coinIsHeads;
+    drawCoin(showingHeads, cosA);
 
   }else if(state==='bounce'){
     bV+=0.72;
@@ -345,7 +346,7 @@ function loop(ts){
       if(Math.abs(bV)<.6){posY=0;bV=0;land();}
     }
     CC.style.transform=`translateY(${posY}px)`;
-    drawCoin(coinIsHeads, coinIsHeads ? 1 : -1);
+    drawCoin(coinIsHeads, 1);
   }
 
   requestAnimationFrame(loop);
